@@ -1,8 +1,8 @@
 const express = require(`express`);
 const http = require(`http`);
 const parser = require(`body-parser`);
-const moment = require(`moment`);
 const { readdirSync } = require(`fs`);
+const { CronJob } = require("cron");
 const app = express();
 app.use(parser.json());
 app.disable(`x-powered-by`);
@@ -73,13 +73,8 @@ server.http = http.createServer(app).listen(server.cfg.port, async () => {
     if(server.cfg.bot.enabled) require(`./bot`);
 });
 
-app.use((req, res, next) => {
-    const version = req.headers[`x-addon-version`] ? `Addon v${req.headers[`x-addon-version`]}` : `API`;
-    const time = moment(new Date()).format(server.cfg.logTimeFormat);
-
-    if(req.path != `/ping`) console.log(`[${time}] ${req.method.toUpperCase()} ${req.path} [${version}] [${!!req.headers.authorization ? `` : `NO `}AUTH]`);
-    next();
-});
+app.use(server.util.i18n);
+app.use(server.util.log);
 
 app.get(`/`, (req, res) => {
     res.send({
@@ -100,6 +95,10 @@ readdirSync(`./src/routes`).filter(file => file.endsWith(`.js`)).forEach(file =>
     app.use(`/${file.slice(0, -3)}`, route);
     route.use(server.util.catchError);
     console.log(`[SERVER] Loaded Route /${file.slice(0, -3)}`);
+
+    new CronJob(`0 */6 * * *`, () => {
+        server.util.pullNewTranslations();
+    }, null, true, null, null);
 });
 
 app.use(server.util.catchError);

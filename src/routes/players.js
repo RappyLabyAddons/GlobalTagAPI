@@ -10,12 +10,12 @@ router.route(`/:uuid`)
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, false);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to use this feature!` });
-    if(server.cfg.requireSessionIds && !authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(server.cfg.requireSessionIds && !authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
 
     const player = await server.db.players.findOne({ uuid });
-    if(!player) return res.status(404).send({ error: `This player does not have a tag!` });
-    if(player.isBanned()) return res.status(403).send({ error: `This player is banned!` });
+    if(!player) return res.status(404).send({ error: req.i18n(`general.noTag`) });
+    if(player.isBanned()) return res.status(403).send({ error: req.i18n(`ban.player`) });
 
     res.send({
         uuid: player.uuid,
@@ -32,16 +32,16 @@ router.route(`/:uuid`)
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, true);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to set a global tag!` });
-    if(!authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(!authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
     
     const player = await server.db.players.findOne({ uuid });
-    if(player && player.isBanned()) return res.status(403).send({ error: `You are banned from changing your tag!` });
+    if(player && player.isBanned()) return res.status(403).send({ error: req.i18n(`ban.self`) });
     const { minTag, maxTag } = server.cfg.validation;
-    if(!tag || tag.length <= minTag || tag.length > maxTag) return res.status(400).send({ error: `The tag has to be between ${minTag} and ${maxTag} characters.` });
+    if(!tag || tag.length <= minTag || tag.length > maxTag) return res.status(400).send({ error: req.i18n(`setTag.validation`).replace(`<min>`, minTag).replace(`<max>`, maxTag) });
     if([`labymod`].some((word) => {
         if(tag.replace(/(&|§)[0-9A-FK-ORX]/gi, ``).toLowerCase().includes(word)) {
-            res.status(400).send({ error: `You're not allowed to include "${word}" in your Global Tag!` });
+            res.status(400).send({ error: req.i18n(`setTag.bannedWord`).replace(`<word>`, word) });
             return true;
         } else return false;
     })) return;
@@ -53,15 +53,15 @@ router.route(`/:uuid`)
             history: [tag]
         }).save();
         
-        res.status(201).send({ message: `Your tag was successfully set!` });
+        res.status(201).send({ message: req.i18n(`setTag.success`) });
     } else {
-        if(player.tag == tag) return res.status(400).send({ error: `You already have this tag!` });
+        if(player.tag == tag) return res.status(400).send({ error: req.i18n(`setTag.alreadySet`) });
 
         player.tag = tag;
         if(player.history[player.history.length - 1] != tag) player.history.push(tag);
         await player.save();
         
-        res.status(200).send({ message: `Your tag was successfully updated!` });
+        res.status(200).send({ message: req.i18n(`setTag.success`) });
     }
 }).delete(async (req, res) => {
     if(server.util.ratelimitResponse(req, res, server.ratelimit.changeTag)) return;
@@ -70,18 +70,18 @@ router.route(`/:uuid`)
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, true);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to use this feature!` });
-    if(!authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(!authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
 
     const player = await server.db.players.findOne({ uuid });
-    if(!player) return res.status(404).send({ error: `You don't have a tag!` });
-    if(player.isBanned()) return res.status(403).send({ error: `You are banned!` });
-    if(!player.tag) return res.status(404).send({ error: `You don't have a tag!` });
+    if(!player) return res.status(404).send({ error: req.i18n(`resetTag.noTag`) });
+    if(player.isBanned()) return res.status(403).send({ error: req.i18n(`ban.self`) });
+    if(!player.tag) return res.status(404).send({ error: req.i18n(`resetTag.noTag`) });
 
     player.tag = null;
     await player.save();
 
-    res.status(200).send({ message: `Your tag was successfully reset!` });
+    res.status(200).send({ message: req.i18n(`resetTag.success`) });
 });
 
 router.post(`/:uuid/position`, async (req, res) => {
@@ -92,20 +92,20 @@ router.post(`/:uuid/position`, async (req, res) => {
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, true);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to use this feature!` });
-    if(!authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(!authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
 
     const player = await server.db.players.findOne({ uuid });
-    if(!player) return res.status(404).send({ error: `You don't have a tag!` });
-    if(player.isBanned()) return res.status(403).send({ error: `You are banned!` });
-    if(!player.tag) return res.status(404).send({ error: `Please set a tag first!` });
-    if(!position || ![`ABOVE`, `BELOW`, `RIGHT`, `LEFT`].includes(position)) return res.status(400).send({ error: `Please provide a position!` });
-    if(position == player.position) return res.status(400).send({ error: `Your tag is already in this position!` });
+    if(!player) return res.status(404).send({ error: req.i18n(`general.setTag`) });
+    if(player.isBanned()) return res.status(403).send({ error: req.i18n(`ban.self`) });
+    if(!player.tag) return res.status(404).send({ error: req.i18n(`general.setTag`) });
+    if(!position || ![`ABOVE`, `BELOW`, `RIGHT`, `LEFT`].includes(position)) return res.status(400).send({ error: req.i18n(`setPosition.invalid`) });
+    if(position == player.position) return res.status(400).send({ error: req.i18n(`setPosition.alreadySet`) });
 
     player.position = position;
     await player.save();
 
-    res.status(200).send({ message: `Your position was successfully set!` });
+    res.status(200).send({ message: req.i18n(`setPosition.success`) });
 });
 
 router.post(`/:uuid/icon`, async (req, res) => {
@@ -116,20 +116,20 @@ router.post(`/:uuid/icon`, async (req, res) => {
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, true);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to use this feature!` });
-    if(!authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(!authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
 
     const player = await server.db.players.findOne({ uuid });
-    if(!player) return res.status(404).send({ error: `You don't have a tag!` });
-    if(player.isBanned()) return res.status(403).send({ error: `You are banned!` });
-    if(!player.tag) return res.status(404).send({ error: `Please set a tag first!` });
-    if(!icon) return res.status(400).send({ error: `Please provide an icon type!` });
-    if(icon == player.icon) return res.status(400).send({ error: `You already chose this icon!` });
+    if(!player) return res.status(404).send({ error: req.i18n(`general.setTag`) });
+    if(player.isBanned()) return res.status(403).send({ error: req.i18n(`ban.self`) });
+    if(!player.tag) return res.status(404).send({ error: req.i18n(`general.setTag`) });
+    if(!icon) return res.status(400).send({ error: req.i18n(`setIcon.invalid`) });
+    if(icon == player.icon) return res.status(400).send({ error: req.i18n(`setIcon.alreadySet`) });
 
     player.icon = icon;
     await player.save();
 
-    res.status(200).send({ message: `Your icon was successfully set!` });
+    res.status(200).send({ message: req.i18n(`setIcon.success`) });
 });
 
 router.route(`/:uuid/ban`)
@@ -138,14 +138,14 @@ router.route(`/:uuid/ban`)
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, false);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to use this feature!` });
-    if(!authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(!authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
 
     const executor = await server.db.players.findOne({ uuid: server.util.getUuidByJWT(authorization) });
-    if(!executor || !executor.admin) return res.status(403).send({ error: `You're not allowed to perform that request!` });
+    if(!executor || !executor.admin) return res.status(403).send({ error: req.i18n(`general.notAllowed`) });
 
     const player = await server.db.players.findOne({ uuid });
-    if(!player) return res.status(404).send({ error: `There is no such player in our records!` });
+    if(!player) return res.status(404).send({ error: req.i18n(`general.playerNotFound`) });
 
     res.status(200).send({ banned: player.isBanned(), reason: player.isBanned() ? player.ban.reason || null : null });
 }).post(async (req, res) => {
@@ -153,41 +153,41 @@ router.route(`/:uuid/ban`)
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, false);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to use this feature!` });
-    if(!authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(!authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
 
     const executor = await server.db.players.findOne({ uuid: server.util.getUuidByJWT(authorization) });
-    if(!executor || !executor.admin) return res.status(403).send({ error: `You're not allowed to perform that request!` });
+    if(!executor || !executor.admin) return res.status(403).send({ error: req.i18n(`general.notAllowed`) });
 
     const player = await server.db.players.findOne({ uuid });
-    if(!player) return res.status(404).send({ error: `There is no such player in our records!` });
-    if(player.isBanned()) return res.status(409).send({ error: `This player is already banned!` });
+    if(!player) return res.status(404).send({ error: req.i18n(`general.playerNotFound`) });
+    if(player.isBanned()) return res.status(409).send({ error: req.i18n(`ban.alreadyBanned`) });
 
     player.ban.active = true;
-    player.ban.reason = req.body.reason || `No reason provided`;
+    player.ban.reason = req.body.reason || req.i18n(`general.noReason`);
     await player.save();
 
-    res.status(200).send({ message: `The player was successfully banned!` });
+    res.status(200).send({ message: req.i18n(`ban.addedBan`) });
 }).delete(async (req, res) => {
     const uuid = req.params.uuid.replaceAll(`-`, ``);
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, false);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to use this feature!` });
-    if(!authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(!authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
 
     const executor = await server.db.players.findOne({ uuid: server.util.getUuidByJWT(authorization) });
-    if(!executor || !executor.admin) return res.status(403).send({ error: `You're not allowed to perform that request!` });
+    if(!executor || !executor.admin) return res.status(403).send({ error: req.i18n(`general.notAllowed`) });
 
     const player = await server.db.players.findOne({ uuid });
-    if(!player) return res.status(404).send({ error: `There is no such player in our records!` });
-    if(!player.isBanned()) return res.status(409).send({ error: `This player is not banned!` });
+    if(!player) return res.status(404).send({ error: req.i18n(`general.playerNotFound`) });
+    if(!player.isBanned()) return res.status(409).send({ error: req.i18n(`ban.notBanned`) });
 
     player.ban.active = false;
     player.ban.reason = null;
     await player.save();
 
-    res.status(200).send({ message: `The player was successfully unbanned!` });
+    res.status(200).send({ message: req.i18n(`ban.removedBan`) });
 });
 
 router.post(`/:uuid/report`, async (req, res) => {
@@ -197,23 +197,23 @@ router.post(`/:uuid/report`, async (req, res) => {
     const { authorization } = req.headers;
     const authenticated = authorization && server.util.validJWTSession(authorization, uuid, false);
 
-    if(authorization == `0`) return res.status(401).send({ error: `You need a premium account to use this feature!` });
-    if(!authenticated) return res.status(401).send({ error: `You're not allowed to perform that request!` });
+    if(authorization == `0`) return res.status(401).send({ error: req.i18n(`general.noPremium`) });
+    if(!authenticated) return res.status(401).send({ error: req.i18n(`general.notAllowed`) });
 
     const player = await server.db.players.findOne({ uuid });
-    if(!player) return res.status(404).send({ error: `This player does not have a tag!` });
-    if(player.isBanned()) return res.status(403).send({ error: `The player is already banned!` });
-    if(player.admin) return res.status(403).send({ error: `You can't report admins!` });
-    if(!player.tag) return res.status(404).send({ error: `This player does not have a tag!` });
+    if(!player) return res.status(404).send({ error: req.i18n(`general.noTag`) });
+    if(player.isBanned()) return res.status(403).send({ error: req.i18n(`ban.alreadyBanned`) });
+    if(player.admin) return res.status(403).send({ error: req.i18n(`report.admin`) });
+    if(!player.tag) return res.status(404).send({ error: req.i18n(`general.noTag`) });
 
     const reporterUuid = server.util.getUuidByJWT(authorization);
     // const reporter = await server.db.players.findOne({ uuid: reporterUuid });
-    // if(reporter && reporter.isBanned()) return res.status(403).send({ error: `You are banned from reporting other players!` });
+    // if(reporter && reporter.isBanned()) return res.status(403).send({ error: req.i18n(`ban.self`) });
 
-    if(reporterUuid == uuid) return res.status(400).send({ error: `You can't report yourself!` });
-    if(player.reports.some((report) => report.by == reporterUuid && report.reportedName == player.tag)) return res.status(400).send({ error: `You already reported this player's tag!` });
+    if(reporterUuid == uuid) return res.status(400).send({ error: req.i18n(`report.self`) });
+    if(player.reports.some((report) => report.by == reporterUuid && report.reportedName == player.tag)) return res.status(400).send({ error: req.i18n(`report.alreadyReported`) });
     const { reason } = req.body;
-    if(!reason || typeof reason != 'string' || reason.trim() == ``) return res.status(400).send({ error: `You have to provide a valid reason!` });
+    if(!reason || typeof reason != 'string' || reason.trim() == ``) return res.status(400).send({ error: req.i18n(`report.reason`) });
 
     player.reports.push({
         by: reporterUuid,
@@ -265,7 +265,7 @@ router.post(`/:uuid/report`, async (req, res) => {
             )
         ]
     });
-    res.status(200).send({ message: `The player was successfully reported!` });
+    res.status(200).send({ message: req.i18n(`report.success`) });
 });
 
 module.exports = router;

@@ -1,7 +1,41 @@
 const { Request, Response, NextFunction } = require('express');
 const jwt = require(`jsonwebtoken`);
+const moment = require(`moment`);
+const { exec } = require('child_process');
+const lang = require(`../locales/en_us.json`);
+const { existsSync } = require('fs');
 
 module.exports = {
+
+    /**
+     * 
+     * @param {Request} req 
+     * @param {Response} res 
+     * @param {NextFunction} next 
+     */
+
+    log(req, res, next) {
+        const version = req.headers[`x-addon-version`] ? `Addon v${req.headers[`x-addon-version`]}` : `API`;
+        const time = moment(new Date()).format(server.cfg.logTimeFormat);
+    
+        if(req.path != `/ping`) console.log(`[${time}] ${req.method.toUpperCase()} ${req.path} [${version}] [${!!req.headers.authorization ? `` : `NO `}AUTH] [${req.language.toUpperCase()}]`);
+        next();
+    },
+
+    /**
+     * 
+     * @param {Request} req 
+     * @param {Response} res 
+     * @param {NextFunction} next 
+     */
+
+    i18n(req, res, next) {
+        req.language = req.headers[`x-language`] || `en_us`;
+        const locales = server.util.getLocales(req.language);
+        req.i18n = (path) => server.util.getPathValue(locales, path);
+
+        next();
+    },
 
     /**
      * 
@@ -103,5 +137,44 @@ module.exports = {
             remaining: ratelimit.max - player.requests,
             reset: player.timestamp + ratelimit.time - Date.now()
         };
-    }
+    },
+
+    pullNewTranslations() {
+        exec(`"${__dirname}/../sync.sh"`, (error, stdout, stderr) => {
+            for(const file of readdirSync(`./locales`).filter(file => file.endsWith(`.json`))) {
+                delete require.cache[require.resolve(`../locales/${file}`)];
+            }
+            lang = require(`../locales/en-US.json`);
+        }); 
+    },
+
+    /**
+     * 
+     * @param {string} language 
+     * @returns {lang}
+     */
+
+    getLocales(language) {
+        if(existsSync(`./locales/${language}.json`)) return require(`../locales/${language}.json`);
+        else return lang;
+    },
+
+    /**
+     * 
+     * @param {lang} locales 
+     * @param {string} path 
+     * @returns {string}
+     */
+
+    getPathValue(locales, path) {
+        if(typeof locales != `object` || typeof path != `string`) return path;
+        let value = locales;
+
+        for(const key of path.split(`.`)) {
+            if(!value[key]) return path;
+            value = value[key];
+        }
+
+        return value;
+    },
 }
